@@ -1,0 +1,473 @@
+---
+title: "Word Selection Within Spiritual & Life Journey"
+author: "Kate Schertz"
+date: " 24 April 2020 "
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_knit$set(root.dir = "~/Box Sync/Documents/MyOngoing/ThoughtContent_Abstract/ForcedCoice_WithinSLJ/")
+```
+
+```{r message=FALSE}
+library(tidyverse)
+theme_set(theme_minimal())
+set.seed(42)
+```
+
+#Study 1 (Testing NSED)
+
+Reading and manipulating data
+```{r message=FALSE}
+raw_nsed_data <- read_csv("TestingNSED_WithinSLJ (Manuscript Study 3a).csv")
+raw_nsed_data <- raw_nsed_data %>% select(-contains("timing"))
+
+newnames <- c("Subject","NL01","NL02","NL03","NL04","NL05","NL06","NL07","NL08","NL09","NL10","NL11","NL12","NL13","NL14","NL15","NL16","NL17","NL18","NL19","NL20","NH01","NH02","NH03","NH04","NH05","NH06","NH07","NH08","NH09","NH10","NH11","NH12","NH13","NH14","NH15","NH16","NH17","NH18","NH19","NH20")
+
+raw_nsed_data <- raw_nsed_data %>% 
+  mutate(Subject = as.factor(row_number())) %>% 
+  select(Subject, everything()) %>% 
+  select(-c("thoughts", "lab-know", "lab-fam", "lab-def"))
+
+colnames(raw_nsed_data) <- newnames
+
+tidy_nsed <- raw_nsed_data %>% pivot_longer(cols=-Subject)
+tidy_nsed <- tidy_nsed %>% mutate(Category = substr(name,1,2))
+
+numwordspicked <- as.character(seq(1,9,1))
+tidy_nsed <- tidy_nsed %>% separate(col=value, into=numwordspicked, sep=",")
+tidy_nsed <- tidy_nsed %>% mutate(NumWords = 9-rowSums(is.na(.)))
+
+```
+
+###Were more words picked for the NH images than the NL images? 
+No.
+```{r}
+tidy_nsed %>% group_by(Category) %>% summarise(meanNumWordsPicked = mean(NumWords), sdNumWords = sd(NumWords))
+```
+
+We need to look at the nine individual words and see if any were more likely to be picked for High NSED images (NH) than Low NSED images (NL).
+```{r}
+wordcounts1 <- tidy_nsed %>% group_by(Category) %>% count(`1`) %>% rename(words=`1`)
+wordcounts2 <- tidy_nsed %>% group_by(Category) %>% count(`2`) %>% rename(words=`2`)
+wordcounts3 <- tidy_nsed %>% group_by(Category) %>% count(`3`) %>% rename(words=`3`)
+wordcounts4 <- tidy_nsed %>% group_by(Category) %>% count(`4`) %>% rename(words=`4`)
+wordcounts5 <- tidy_nsed %>% group_by(Category) %>% count(`5`) %>% rename(words=`5`)
+wordcounts6 <- tidy_nsed %>% group_by(Category) %>% count(`6`) %>% rename(words=`6`)
+
+allwordcounts <- rbind(wordcounts1, wordcounts2, wordcounts3, wordcounts4, wordcounts5, wordcounts6)
+
+wordsgrouped <- allwordcounts %>% group_by(Category, words) %>% summarise(sumpicked = sum(n))
+
+wordsgrouped_wider <- wordsgrouped %>% 
+  pivot_wider(names_from=Category, values_from=sumpicked) %>% 
+  mutate(OddsRatio = NH/NL, TotalTimesPicked = NH + NL) %>% 
+  filter(!is.na(words))
+wordsgrouped_wider
+```
+
+Looks like feel, labyrinth, and life were chosen more for NH than NL images. We can run a permutation test to see if these are significant.
+
+```{r}
+#Function to get Null distributions of Odds Ratios for each word
+get_random_group_OR = function(data) {
+  diff_result = data %>% 
+    mutate(Category = sample(.$Category))
+  
+  wordcounts1_rand <- diff_result %>% group_by(Category) %>% count(`1`) %>% rename(words=`1`)
+  wordcounts2_rand <- diff_result %>% group_by(Category) %>% count(`2`) %>% rename(words=`2`)
+  wordcounts3_rand <- diff_result %>% group_by(Category) %>% count(`3`) %>% rename(words=`3`)
+  wordcounts4_rand <- diff_result %>% group_by(Category) %>% count(`4`) %>% rename(words=`4`)
+  wordcounts5_rand <- diff_result %>% group_by(Category) %>% count(`5`) %>% rename(words=`5`)
+  wordcounts6_rand <- diff_result %>% group_by(Category) %>% count(`6`) %>% rename(words=`6`)
+
+  allwordcounts_rand <- rbind(wordcounts1_rand, wordcounts2_rand, wordcounts3_rand, wordcounts4_rand, wordcounts5_rand, wordcounts6_rand)
+
+  wordsgrouped_rand <- allwordcounts_rand %>% group_by(Category, words) %>% summarise(sumpicked = sum(n))
+
+  wordsgrouped_wider_rand <- wordsgrouped_rand %>% 
+    pivot_wider(names_from=Category, values_from=sumpicked) %>% 
+    mutate(OddsRatio = NH/NL)
+  wordsgrouped_wider_rand$OddsRatio
+
+}
+
+#Running once to check output
+get_random_group_OR(tidy_nsed)
+```
+
+Running our function 2000 times
+```{r}
+nullORs <- replicate(2000, get_random_group_OR(tidy_nsed))
+reps <- 2000
+```
+
+##Testing each word against its permutated null distribution
+Only showing histograms for words with Odds Ratio greater than 1.
+
+###Feel
+```{r}
+null_feel <- as.data.frame(nullORs[2,]) %>% rename(nulldist=`nullORs[2, ]`)
+obs_OR_feel <- wordsgrouped_wider %>% filter(words == "feel") %>% pull(OddsRatio)
+ggplot(data=null_feel) + 
+  aes(x=nulldist) + 
+  geom_histogram(bins=22) + 
+  geom_vline(xintercept = obs_OR_feel, color="red") + 
+  labs(x="Feel")
+
+#P-value for "picked in NH more than NL"
+(sum(null_feel$nulldist > obs_OR_feel) + 1)/(reps + 1)
+
+```
+
+###Labyrinth
+```{r}
+null_labyrinth <- as.data.frame(nullORs[4,]) %>% rename(nulldist=`nullORs[4, ]`)
+obs_OR_labyrinth <- wordsgrouped_wider %>% filter(words == "labyrinth") %>% pull(OddsRatio)
+
+ggplot(data=null_labyrinth) + 
+  aes(x=nulldist) + 
+  geom_histogram(bins=22) + 
+  geom_vline(xintercept = obs_OR_labyrinth, color="red") + 
+  labs(x="Labyrinth")
+
+#P-valuefor "picked in NH more than NL"
+(sum(null_labyrinth$nulldist > obs_OR_labyrinth)+1)/(reps + 1)
+```
+
+###Life
+```{r}
+null_life <- as.data.frame(nullORs[5,]) %>% rename(nulldist=`nullORs[5, ]`)
+obs_OR_life <- wordsgrouped_wider %>% filter(words == "life") %>% pull(OddsRatio)
+
+ggplot(data=null_life) + 
+  aes(x=nulldist) + 
+  geom_histogram(bins=22) + 
+  geom_vline(xintercept = obs_OR_life, color="red") + 
+  labs(x="Life")
+
+#P-value for "picked in NH more than NL"
+(sum(null_life$nulldist > obs_OR_life)+1)/(reps+1)
+```
+
+###Peace
+```{r}
+null_peace <- as.data.frame(nullORs[7,]) %>% rename(nulldist=`nullORs[7, ]`)
+obs_OR_peace <- wordsgrouped_wider %>% filter(words == "peace") %>% pull(OddsRatio)
+
+ggplot(data=null_peace) + 
+  aes(x=nulldist) + 
+  geom_histogram(bins=22) + 
+  geom_vline(xintercept = obs_OR_peace, color="red") + 
+  labs(x="Peace")
+
+#P-value for "picked in NH more than NL"
+(sum(null_peace$nulldist > obs_OR_peace)+1)/(reps+1)
+```
+
+###Place
+```{r}
+null_place <- as.data.frame(nullORs[8,]) %>% rename(nulldist=`nullORs[8, ]`)
+obs_OR_place <- wordsgrouped_wider %>% filter(words == "place") %>% pull(OddsRatio)
+
+ggplot(data=null_place) + 
+  aes(x=nulldist) + 
+  geom_histogram(bins=22) + 
+  geom_vline(xintercept = obs_OR_place, color="red") + 
+  labs(x="Place")
+
+#P-value for "picked in NH more than NL"
+(sum(null_place$nulldist > obs_OR_place)+1)/(reps+1)
+```
+
+###Center
+```{r}
+null_center <- as.data.frame(nullORs[1,]) %>% rename(nulldist=`nullORs[1, ]`)
+obs_OR_center <- wordsgrouped_wider %>% filter(words == "center") %>% pull(OddsRatio)
+#ggplot(data=null_center) + 
+  # aes(x=nulldist) + 
+  # geom_histogram(bins=22) + 
+  # geom_vline(xintercept = obs_OR_center, color="red") + 
+  # labs(x="Center")
+
+#P-value for "picked in NH more than NL"
+(sum(null_center$nulldist > obs_OR_center)+1)/(reps+1)
+```
+
+###God
+```{r}
+null_god <- as.data.frame(nullORs[3,]) %>% rename(nulldist=`nullORs[3, ]`)
+obs_OR_god <- wordsgrouped_wider %>% filter(words == "god") %>% pull(OddsRatio)
+#ggplot(data=null_god) + 
+  # aes(x=nulldist) + 
+  # geom_histogram(bins=22) + 
+  # geom_vline(xintercept = obs_OR_god, color="red") + 
+  # labs(x="God")
+
+#P-value for "picked in NH more than NL"
+(sum(null_god$nulldist > obs_OR_god)+1)/(reps+1)
+```
+
+###Path
+```{r}
+null_path <- as.data.frame(nullORs[6,]) %>% rename(nulldist=`nullORs[6, ]`)
+obs_OR_path <- wordsgrouped_wider %>% filter(words == "path") %>% pull(OddsRatio)
+
+#ggplot(data=null_path) + 
+  # aes(x=nulldist) + 
+  # geom_histogram(bins=22) + 
+  # geom_vline(xintercept = obs_OR_path, color="red") + 
+  # labs(x="Path")
+
+#P-value for "picked in NH more than NL"
+(sum(null_path$nulldist > obs_OR_path)+1)/(reps+1)
+```
+
+###Walk
+```{r}
+null_walk <- as.data.frame(nullORs[9,]) %>% rename(nulldist=`nullORs[9, ]`)
+obs_OR_walk <- wordsgrouped_wider %>% filter(words == "walk") %>% pull(OddsRatio)
+
+#ggplot(data=null_path) + 
+  #aes(x=nulldist) + 
+  #geom_histogram(bins=22) + 
+  #geom_vline(xintercept = obs_OR_walk, color="red") + 
+  #labs(x= "Walk")
+
+#P-value for "picked in NH more than NL"
+(sum(null_walk$nulldist > obs_OR_walk)+1)/(reps+1)
+```
+
+#Study 2 (Testing Naturalness)
+
+Reading and manipulating data
+```{r message=FALSE}
+raw_nat_data <- read_csv("TestingNaturalness_WithinSLJ (Manuscript Study 3b).csv")
+raw_nat_data <- raw_nat_data %>% select(-contains("timing"))
+
+newnames_nat <- c("Subject","UL01","UL02","UL03","UL04","UL05","UL06","UL07","UL08","UL09","UL10","UL11","UL12","UL13","UL14","UL15","UL16","UL17","UL18","UL19","UL20","NL01","NL02","NL03","NL04","NL05","NL06","NL07","NL08","NL09","NL10","NL11","NL12","NL13","NL14","NL15","NL16","NL17","NL18","NL19","NL20")
+
+raw_nat_data <- raw_nat_data %>% 
+  mutate(Subject = as.factor(row_number())) %>% 
+  select(Subject, everything()) %>% 
+  select(-c("thoughts", "lab-know", "lab-fam", "lab-def"))
+
+colnames(raw_nat_data) <- newnames_nat
+
+tidy_nat <- raw_nat_data %>% pivot_longer(cols=-Subject)
+tidy_nat <- tidy_nat %>% mutate(Category = substr(name,1,2))
+
+numwordspicked <- as.character(seq(1,9,1))
+tidy_nat <- tidy_nat %>% separate(col=value, into=numwordspicked, sep=",")
+tidy_nat <- tidy_nat %>% mutate(NumWords = 9-rowSums(is.na(.)))
+
+```
+
+###Were more words picked for the UL images than the NL images? 
+No.
+```{r}
+tidy_nat %>% group_by(Category) %>% summarise(meanNumWordsPicked = mean(NumWords), sdNumWords = sd(NumWords))
+```
+
+We need to look at the nine individual words and see if any were more likely to be picked for Low Naturalness images (UL) than High Naturalness images (NL).
+```{r}
+wordcounts1_nat <- tidy_nat %>% group_by(Category) %>% count(`1`) %>% rename(words=`1`)
+wordcounts2_nat <- tidy_nat %>% group_by(Category) %>% count(`2`) %>% rename(words=`2`)
+wordcounts3_nat <- tidy_nat %>% group_by(Category) %>% count(`3`) %>% rename(words=`3`)
+wordcounts4_nat <- tidy_nat %>% group_by(Category) %>% count(`4`) %>% rename(words=`4`)
+wordcounts5_nat <- tidy_nat %>% group_by(Category) %>% count(`5`) %>% rename(words=`5`)
+wordcounts6_nat <- tidy_nat %>% group_by(Category) %>% count(`6`) %>% rename(words=`6`)
+wordcounts7_nat <- tidy_nat %>% group_by(Category) %>% count(`7`) %>% rename(words=`7`)
+
+allwordcounts_nat <- rbind(wordcounts1_nat, wordcounts2_nat, wordcounts3_nat, wordcounts4_nat, wordcounts5_nat, wordcounts6_nat, wordcounts7_nat)
+
+wordsgrouped_nat <- allwordcounts_nat %>% group_by(Category, words) %>% summarise(sumpicked = sum(n))
+
+wordsgrouped_wider_nat <- wordsgrouped_nat %>% 
+  pivot_wider(names_from=Category, values_from=sumpicked) %>% 
+  mutate(OddsRatio = UL/NL, TotalTimesPicked = NL + UL) %>% 
+  filter(!is.na(words))
+wordsgrouped_wider_nat
+```
+
+Looks like center, labyrinth, and place were chosen more for UL than NL images. We can run a permutation test to see if these are significant.
+```{r}
+#Function to get Null distributions of Odds Ratios for each word
+get_random_group_OR_nat = function(data) {
+  diff_result = data %>% 
+    mutate(Category = sample(.$Category))
+  
+  wordcounts1_rand_nat <- diff_result %>% group_by(Category) %>% count(`1`) %>% rename(words=`1`)
+  wordcounts2_rand_nat <- diff_result %>% group_by(Category) %>% count(`2`) %>% rename(words=`2`)
+  wordcounts3_rand_nat <- diff_result %>% group_by(Category) %>% count(`3`) %>% rename(words=`3`)
+  wordcounts4_rand_nat <- diff_result %>% group_by(Category) %>% count(`4`) %>% rename(words=`4`)
+  wordcounts5_rand_nat <- diff_result %>% group_by(Category) %>% count(`5`) %>% rename(words=`5`)
+  wordcounts6_rand_nat <- diff_result %>% group_by(Category) %>% count(`6`) %>% rename(words=`6`)
+  wordcounts7_rand_nat <- diff_result %>% group_by(Category) %>% count(`7`) %>% rename(words=`7`)
+
+  allwordcounts_rand_nat <- rbind(wordcounts1_rand_nat, wordcounts2_rand_nat, wordcounts3_rand_nat, wordcounts4_rand_nat, wordcounts5_rand_nat, wordcounts6_rand_nat, wordcounts7_rand_nat)
+
+  wordsgrouped_rand_nat <- allwordcounts_rand_nat %>% group_by(Category, words) %>% summarise(sumpicked = sum(n))
+
+  wordsgrouped_wider_rand_nat <- wordsgrouped_rand_nat %>% 
+    pivot_wider(names_from=Category, values_from=sumpicked) %>% 
+    mutate(OddsRatio = UL/NL)
+  wordsgrouped_wider_rand_nat$OddsRatio
+
+}
+
+```
+
+Running our function 2000 times
+```{r}
+nullORs_nat <- replicate(2000, get_random_group_OR_nat(tidy_nat))
+reps <- 2000
+```
+
+##Testing each word against its permutated null distribution
+Only showing histograms for words with Odds Ratio greater than 1.
+
+###Center
+```{r}
+null_center_nat <- as.data.frame(nullORs_nat[1,]) %>% rename(nulldist=`nullORs_nat[1, ]`)
+obs_OR_center_nat <- wordsgrouped_wider_nat %>% filter(words == "center") %>% pull(OddsRatio)
+ggplot(data=null_center_nat) + 
+  aes(x=nulldist) + 
+  geom_histogram(bins=22) + 
+  geom_vline(xintercept = obs_OR_center_nat, color="red") + 
+  labs(x="Center")
+
+#P-value for "picked in UL more than NL"
+(sum(null_center_nat$nulldist > obs_OR_center_nat)+1)/(reps+1)
+```
+
+###Labyrinth
+```{r}
+null_labyrinth_nat <- as.data.frame(nullORs_nat[4,]) %>% rename(nulldist=`nullORs_nat[4, ]`)
+obs_OR_labyrinth_nat <- wordsgrouped_wider_nat %>% filter(words == "labyrinth") %>% pull(OddsRatio)
+
+ggplot(data=null_labyrinth_nat) + 
+  aes(x=nulldist) + 
+  geom_histogram(bins=22) + 
+  geom_vline(xintercept = obs_OR_labyrinth_nat, color="red") + 
+  labs(x="Labyrinth")
+
+#P-value for "picked in UL more than NL"
+(sum(null_labyrinth_nat$nulldist > obs_OR_labyrinth_nat)+1)/(reps+1)
+```
+
+###Place
+```{r}
+null_place_nat <- as.data.frame(nullORs_nat[8,]) %>% rename(nulldist=`nullORs_nat[8, ]`)
+obs_OR_place_nat <- wordsgrouped_wider_nat %>% filter(words == "place") %>% pull(OddsRatio)
+
+ggplot(data=null_place_nat) + 
+  aes(x=nulldist) + 
+  geom_histogram(bins=22) + 
+  geom_vline(xintercept = obs_OR_place_nat, color="red") + 
+  labs(x="Place")
+
+#P-value for "picked in UL more than NL"
+(sum(null_place_nat$nulldist > obs_OR_place_nat)+1)/(reps+1)
+```
+
+###Feel
+```{r}
+null_feel_nat <- as.data.frame(nullORs_nat[2,]) %>% rename(nulldist=`nullORs_nat[2, ]`)
+obs_OR_feel_nat <- wordsgrouped_wider_nat %>% filter(words == "feel") %>% pull(OddsRatio)
+
+# ggplot(data=null_feel_nat) + 
+#   aes(x=nulldist) + 
+#   geom_histogram(bins=22) + 
+#   geom_vline(xintercept = obs_OR_feel_nat, color="red") + 
+#   labs(x="Feel")
+
+#P-value for "picked in UL more than NL"
+(sum(null_feel_nat$nulldist > obs_OR_feel_nat)+1)/(reps+1)
+
+```
+
+###Life
+```{r}
+null_life_nat <- as.data.frame(nullORs_nat[5,]) %>% rename(nulldist=`nullORs_nat[5, ]`)
+obs_OR_life_nat <- wordsgrouped_wider_nat %>% filter(words == "life") %>% pull(OddsRatio)
+
+# ggplot(data=null_life_nat) + 
+#   aes(x=nulldist) + 
+#   geom_histogram(bins=22) + 
+#   geom_vline(xintercept = obs_OR_life_nat, color="red") + 
+#   labs(x="Life")
+
+#P-value for "picked in UL more than NL"
+(sum(null_life_nat$nulldist > obs_OR_life_nat)+1)/(reps+1)
+```
+
+###Peace
+```{r}
+null_peace_nat <- as.data.frame(nullORs_nat[7,]) %>% rename(nulldist=`nullORs_nat[7, ]`)
+obs_OR_peace_nat <- wordsgrouped_wider_nat %>% filter(words == "peace") %>% pull(OddsRatio)
+
+# ggplot(data=null_peace_nat) + 
+#   aes(x=nulldist) + 
+#   geom_histogram(bins=22) + 
+#   geom_vline(xintercept = obs_OR_peace_nat, color="red") + 
+#   labs(x="Peace")
+
+#P-value for "picked in UL more than NL"
+(sum(null_peace_nat$nulldist > obs_OR_peace_nat)+1)/(reps+1)
+```
+
+###God
+```{r}
+null_god_nat <- as.data.frame(nullORs_nat[3,]) %>% rename(nulldist=`nullORs_nat[3, ]`)
+obs_OR_god_nat <- wordsgrouped_wider_nat %>% filter(words == "god") %>% pull(OddsRatio)
+
+# ggplot(data=null_god_nat) + 
+#   aes(x=nulldist) + 
+#   geom_histogram(bins=22) + 
+#   geom_vline(xintercept = obs_OR_god_nat, color="red") + 
+#   labs(x="God")
+
+#P-value for "picked in UL more than NL"
+(sum(null_god_nat$nulldist > obs_OR_god_nat)+1)/(reps+1)
+```
+
+###Path
+```{r}
+null_path_nat <- as.data.frame(nullORs_nat[6,]) %>% rename(nulldist=`nullORs_nat[6, ]`)
+obs_OR_path_nat <- wordsgrouped_wider_nat %>% filter(words == "path") %>% pull(OddsRatio)
+
+# ggplot(data=null_path_nat) + 
+#   aes(x=nulldist) + 
+#   geom_histogram(bins=22) + 
+#   geom_vline(xintercept = obs_OR_path_nat, color="red") + 
+#   labs(x="Path")
+
+#P-value for "picked in UL more than NL"
+(sum(null_path_nat$nulldist > obs_OR_path_nat)+1)/(reps+1)
+```
+
+###Walk
+```{r}
+null_walk_nat <- as.data.frame(nullORs_nat[9,]) %>% rename(nulldist=`nullORs_nat[9, ]`)
+obs_OR_walk_nat <- wordsgrouped_wider_nat %>% filter(words == "walk") %>% pull(OddsRatio)
+
+# ggplot(data=null_path_nat) + 
+#   aes(x=nulldist) + 
+#   geom_histogram(bins=22) + 
+#   geom_vline(xintercept = obs_OR_walk_nat, color="red") + 
+#   labs(x= "Walk")
+
+#P-value for "picked in UL more than NL"
+(sum(null_walk_nat$nulldist > obs_OR_walk_nat)+1)/(reps+1)
+```
+
+##Summary
+In summary, while labyrinth remains preferentially selected for the High NSED images (Study 1) and Low Naturalness images (Study 2), it is not the only word within the Spiritual & Life Journey topic to show these effects. 
+
+For Study 1, feel and life (marginal) also have an Odds Ratio higher than 1 (selection in NH/NL). In terms of overall selection, feel and labyrinth were chosen the same amount, while life was chosen more.
+
+For Study 2, center and place have Odds Ratios higher than 1 (selection in UL/NL). In terms of overall selection, center and place were both picked more overall than labyrinth. 
+
+This provides evidence that our initial results are not solely due to the word labyrinth.

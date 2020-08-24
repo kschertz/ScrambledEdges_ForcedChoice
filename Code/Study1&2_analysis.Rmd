@@ -1,0 +1,279 @@
+---
+title: "Analysis Code - Study 1 and 2"
+author: "Kate Schertz"
+date: "8/21/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_knit$set(root.dir = "~/Box Sync/Documents/MyOngoing/ThoughtContent_Abstract/ForcedChoice/")
+
+library(tidyverse)
+library(lme4)
+library(ggplot2)
+library(stargazer)
+```
+
+#Data Setup Study 1
+```{r}
+
+testnsed <- read_csv("TestingNSED_AllTopicData (Manuscript Study 1).csv")
+
+nsed_longer <- testnsed %>% pivot_longer(cols=-Subject, names_to = "Image", values_to = "Topic")
+nsed_longer$Topic <- as.factor(nsed_longer$Topic)
+nsed_longer$Image <- as.factor(nsed_longer$Image)
+nsed_longer$Subject <- as.factor(nsed_longer$Subject)
+
+nsed_low_imgs <- colnames(testnsed)[2:21]
+nsed_high_imgs <- colnames(testnsed)[22:41]
+
+#Adding which NSED condition each image belongs to
+nsed_longer <- nsed_longer %>% 
+  mutate(NSED = case_when(
+    Image %in% nsed_low_imgs ~ "Low",
+    Image %in% nsed_high_imgs ~ "High"
+  ))
+
+nsed_longer$NSED <- factor(nsed_longer$NSED, levels = c("Low","High"))
+
+#Creating individual columns for each topic in order to perform logistic regression
+nsed_longer <- nsed_longer %>% 
+  mutate(Art = if_else(Topic == "Art", 1, 0),
+         Celebration = if_else(Topic == "Celebration",1,0),
+         Family = if_else(Topic == "Family",1,0),
+         LifeEmotion = if_else(Topic == "Life&Emotion",1,0),
+         Nature = if_else(Topic == "Nature", 1, 0),
+         Park = if_else(Topic == "Park", 1, 0),
+         Religion = if_else(Topic == "Religion", 1, 0),
+         SLJ = if_else(Topic == "Spiritual&LifeJourney", 1, 0),
+         TimeMemories = if_else(Topic == "Time&Memories", 1, 0),
+         WorldPeace = if_else(Topic == "World&Peace", 1, 0))
+```
+
+#Study 1 - Main Analysis
+```{r}
+#Model for predicting Spiritual & Life Journey topic
+slj_nsed_model <- glmer(SLJ ~ NSED + (1 | Subject) + (1|Image), data = nsed_longer, family = binomial(logit), control = glmerControl(optimizer = "bobyqa"), nAGQ = 1)
+summary(slj_nsed_model)
+
+slj_nsed_nullmodel <- glmer(SLJ ~ 1 + (1 | Subject) + (1|Image), data = nsed_longer, family = binomial(logit), control = glmerControl(optimizer = "bobyqa"), nAGQ = 1)
+summary(slj_nsed_nullmodel)
+
+anova(slj_nsed_model, slj_nsed_nullmodel)
+
+# Odds Ratio. 1.5 times as likely to be chosen in High NSED. In original study with intact images, the odds ratio was 1.6.
+exp(slj_nsed_model@beta[2])
+
+#Model for predicting Nature topic
+nat_nsed_nullmodel <- glmer(Nature ~ 1 + (1 | Subject) + (1|Image), data = nsed_longer, family = binomial(logit), control = glmerControl(optimizer = "bobyqa"), nAGQ = 1)
+
+nat_nsed_model <- glmer(Nature ~ NSED + (1 | Subject) + (1|Image), data = nsed_longer, family = binomial(logit), control = glmerControl(optimizer = "bobyqa"), nAGQ = 1)
+
+# Comparing models. Does not match predictions - Not significant. In original model beta = .50
+summary(nat_nsed_nullmodel)
+summary(nat_nsed_model)
+anova(nat_nsed_model, nat_nsed_nullmodel)
+
+#Nicer table output
+stargazer(slj_nsed_model, nat_nsed_model, ci=TRUE, single.row = TRUE, type = "text", intercept.bottom = FALSE, intercept.top = TRUE, align = TRUE)
+```
+
+#Data Setup Study 2
+```{r}
+
+testnat <- read_csv("TestingNaturalness_AllTopicData (Manuscript Study 2).csv")
+
+nat_longer <- testnat %>% pivot_longer(cols=-Subject, names_to = "Image", values_to = "Topic")
+nat_longer$Topic <- as.factor(nat_longer$Topic)
+nat_longer$Image <- as.factor(nat_longer$Image)
+nat_longer$Subject <- as.factor(nat_longer$Subject)
+
+nat_low_imgs <- colnames(testnat)[2:21]
+nat_high_imgs <- colnames(testnat)[22:41]
+
+#Adding which NSED condition each image belongs to
+nat_longer <- nat_longer %>% 
+  mutate(Naturalness = case_when(
+    Image %in% nat_low_imgs ~ "Low",
+    Image %in% nat_high_imgs ~ "High"
+  ))
+
+nat_longer$Naturalness <- factor(nat_longer$Naturalness, levels = c("Low","High"))
+
+#Creating individual columns for each topic in order to perform logistic regression
+nat_longer <- nat_longer %>% 
+  mutate(Art = if_else(Topic == "Art", 1, 0),
+         Celebration = if_else(Topic == "Celebration",1,0),
+         Family = if_else(Topic == "Family",1,0),
+         LifeEmotion = if_else(Topic == "Life&Emotion",1,0),
+         Nature = if_else(Topic == "Nature", 1, 0),
+         Park = if_else(Topic == "Park", 1, 0),
+         Religion = if_else(Topic == "Religion", 1, 0),
+         SLJ = if_else(Topic == "Spiritual&LifeJourney", 1, 0),
+         TimeMemories = if_else(Topic == "Time&Memories", 1, 0),
+         WorldPeace = if_else(Topic == "World&Peace", 1, 0))
+```
+
+#Study 2 - Main Analysis
+```{r}
+#Model for Spiritual & Life Journey topic
+slj_nat_model <- glmer(SLJ ~ Naturalness + (1 | Subject) + (1|Image), data = nat_longer, family = binomial(logit), control = glmerControl(optimizer = "bobyqa"), nAGQ = 1)
+summary(slj_nat_model)
+
+slj_nat_nullmodel <- glmer(SLJ ~ 1 + (1 | Subject) + (1|Image), data = nat_longer, family = binomial(logit), control = glmerControl(optimizer = "bobyqa"), nAGQ = 1)
+summary(slj_nat_nullmodel)
+
+# Comparing the models. Results are as expected. Negative effect of naturalness on choosing SLJ.
+anova(slj_nat_model, slj_nat_nullmodel)
+
+# Odds ratio. 2.4 times as likely to be chosen in Low Naturalness. In original paper, was 1.3.
+exp(-slj_nat_model@beta[2])
+
+#Model predicting nature topic
+nat_nat_model <- glmer(Nature ~ Naturalness + (1 | Subject) + (1|Image), data = nat_nat_melt, family = binomial(logit), control = glmerControl(optimizer = "bobyqa"), nAGQ = 1)
+summary(nat_nat_model)
+
+nat_nat_nullmodel <- glmer(Nature ~ 1 + (1 | Subject), data = nat_nat_melt, family = binomial(logit), control = glmerControl(optimizer = "bobyqa"), nAGQ = 10)
+summary(nat_nat_nullmodel)
+
+# Comparing models. Results are as predicted and much stronger effect than in original
+anova(nat_nat_model, nat_nat_nullmodel)
+
+# Odds ratio. Nature 3.7 times as likely to chosen in high Naturalness condition, in original OR = 2.0
+exp(nat_nat_model@beta[2])
+
+stargazer(slj_nat_model, nat_nat_model, ci=TRUE, single.row = TRUE, type = "text", intercept.bottom = FALSE, intercept.top = TRUE, align = TRUE)
+```
+
+#Study 1 - Supplemental Analysis
+Supplemental analyses include logistic regressions for all other topics (i.e. Not Spiritual & Life Journey and Nature), and logistic regression for Spiritual & Life Journey and Nature for a smaller image set (17 images per group instead of 20 per group) with no statisticial difference in naturalness ratings. For models that resulted in sigular fit with both random intercepts, changed model to only subject as random intercept.
+```{r}
+#NSED models with adjusted image set (not statistically significant naturalness ratings between the two image groups). Images were identified previously - removing lowest three rated images from NL group and highest three rated images from NH group.
+
+img_to_remove <- c("NL05","NL15","NL17","NH11","NH15","NH19")
+nsed_longer_natmatched <- nsed_longer %>% filter(!(Image %in% img_to_remove))
+
+#Spiritual & Life Journey Model
+slj_nsed_model_natmatched <- glmer(SLJ ~ NSED + (1 | Subject) + (1|Image), data = nsed_longer_natmatched, family = binomial(logit), control = glmerControl(optimizer = "bobyqa"), nAGQ = 1)
+summary(slj_nsed_model_natmatched)
+
+slj_nsed_nullmodel_natmatched <- glmer(SLJ ~ 1 + (1 | Subject) + (1|Image), data = nsed_longer_natmatched, family = binomial(logit), control = glmerControl(optimizer = "bobyqa"), nAGQ = 1)
+summary(slj_nsed_nullmodel_natmatched)
+
+anova(slj_nsed_model_natmatched, slj_nsed_nullmodel_natmatched)
+
+#Nature Model
+nat_nsed_nullmodel_natmatched <- glmer(Nature ~ 1 + (1 | Subject) + (1|Image), data = nsed_longer_natmatched, family = binomial(logit), control = glmerControl(optimizer = "bobyqa"), nAGQ = 1)
+summary(nat_nsed_model_natmatched)
+
+nat_nsed_model_natmatched <- glmer(Nature ~ NSED + (1 | Subject) + (1|Image), data = nsed_longer_natmatched, family = binomial(logit), control = glmerControl(optimizer = "bobyqa"), nAGQ = 1)
+summary(nat_nsed_nullmodel_natmatched)
+
+anova(nat_nsed_model_natmatched, nat_nsed_nullmodel_natmatched)
+
+
+#NSED Models for all topics. Nothing is significant. With intact images, NSED had a significant effect on LifeEmotions (pos), Park (neg), and Religion (pos)
+#Art
+art_nsed_model <- glmer(Art ~ NSED + (1 | Subject) + (1|Image), data = nsed_longer, family = binomial(logit), control = glmerControl(optimizer = "bobyqa"))
+summary(art_nsed_model)
+art_nsed_nullmodel <- glmer(Art ~ 1 + (1 | Subject) + (1|Image), data = nsed_longer, family = binomial(logit), control = glmerControl(optimizer = "bobyqa"))
+anova(art_nsed_model, art_nsed_nullmodel)
+#Celebration
+cel_nsed_model <- glmer(Celebration ~ NSED + (1 | Subject) + (1|Image), data = nsed_longer, family = binomial(logit), control = glmerControl(optimizer = "bobyqa"))
+summary(cel_nsed_model)
+cel_nsed_nullmodel <- glmer(Celebration ~ 1 + (1 | Subject) + (1|Image), data = nsed_longer, family = binomial(logit), control = glmerControl(optimizer = "bobyqa"))
+anova(cel_nsed_model, cel_nsed_nullmodel)
+#Family
+fam_nsed_model <- glmer(Family ~ NSED + (1 | Subject) + (1|Image), data = nsed_longer, family = binomial(logit), control = glmerControl(optimizer = "bobyqa"))
+summary(fam_nsed_model)
+fam_nsed_nullmodel <- glmer(Family ~ 1 + (1 | Subject) + (1|Image), data = nsed_longer, family = binomial(logit), control = glmerControl(optimizer = "bobyqa"))
+anova(fam_nsed_model, fam_nsed_nullmodel)
+#LifeEmotion
+le_nsed_model <- glmer(LifeEmotion ~ NSED + (1 | Subject) + (1|Image), data = nsed_longer, family = binomial(logit), control = glmerControl(optimizer = "bobyqa"))
+summary(le_nsed_model)
+le_nsed_model2 <- glmer(LifeEmotion ~ NSED + (1 | Subject), data = nsed_longer, family = binomial(logit), control = glmerControl(optimizer = "bobyqa"))
+summary(le_nsed_model2)
+le_nsed_nullmodel <- glmer(LifeEmotion ~ 1 + (1 | Subject), data = nsed_longer, family = binomial(logit), control = glmerControl(optimizer = "bobyqa"))
+anova(le_nsed_model2, le_nsed_nullmodel)
+#Park
+park_nsed_model <- glmer(Park ~ NSED + (1 | Subject) + (1|Image), data = nsed_longer, family = binomial(logit), control = glmerControl(optimizer = "bobyqa"))
+summary(park_nsed_model)
+park_nsed_model2 <- glmer(Park ~ NSED + (1 | Subject), data = nsed_longer, family = binomial(logit), control = glmerControl(optimizer = "bobyqa"))
+summary(park_nsed_model2)
+park_nsed_nullmodel <- glmer(Park ~ 1 + (1 | Subject), data = nsed_longer, family = binomial(logit), control = glmerControl(optimizer = "bobyqa"))
+anova(park_nsed_model2, park_nsed_nullmodel)
+#Religion
+rel_nsed_model <- glmer(Religion ~ NSED + (1|Subject) + (1|Image), data = nsed_longer, family = binomial(logit), control = glmerControl(optimizer = "bobyqa"))
+summary(rel_nsed_model)
+rel_nsed_model2 <- glmer(Religion ~ NSED + (1|Subject), data = nsed_longer, family = binomial(logit), control = glmerControl(optimizer = "bobyqa"))
+summary(rel_nsed_model)
+rel_nsed_nullmodel <- glmer(Religion ~ 1 + (1 | Subject), data = nsed_longer, family = binomial(logit), control = glmerControl(optimizer = "bobyqa"))
+anova(rel_nsed_model2, rel_nsed_nullmodel)
+#TimeMemories
+time_nsed_model <- glmer(TimeMemories ~ NSED + (1 | Subject) + (1|Image), data = nsed_longer, family = binomial(logit), control = glmerControl(optimizer = "bobyqa"))
+summary(time_nsed_model)
+time_nsed_nullmodel <- glmer(TimeMemories ~ 1 + (1 | Subject) + (1|Image), data = nsed_longer, family = binomial(logit), control = glmerControl(optimizer = "bobyqa"))
+anova(time_nsed_model, time_nsed_nullmodel)
+#WorldPeace
+world_nsed_model <- glmer(WorldPeace ~ NSED + (1 | Subject) + (1|Image), data = nsed_longer, family = binomial(logit), control = glmerControl(optimizer = "bobyqa"))
+summary(world_nsed_model)
+world_nsed_model2 <- glmer(WorldPeace ~ NSED + (1 | Subject), data = nsed_longer, family = binomial(logit), control = glmerControl(optimizer = "bobyqa"))
+summary(world_nsed_model2)
+world_nsed_nullmodel <- glmer(WorldPeace ~ 1 + (1 | Subject), data = nsed_longer, family = binomial(logit), control = glmerControl(optimizer = "bobyqa"))
+anova(world_nsed_model2, world_nsed_nullmodel)
+```
+
+
+#Study 2 - Supplemental Analysis
+Supplemental analyses include logistic regressions for all other topics (i.e. Not Spiritual & Life Journey and Nature). For models that resulted in sigular fit with both random intercepts, changed model to only subject as random intercept.
+```{r}
+#Naturalness models for all topics. With intact images, significant predictor of TimeMemories (pos), WorldPeace (neg), Family (neg), Park (pos), Art (neg), Religion (pos). Here Celebration (neg), Religion (pos), TimeMemories (neg) are significant
+#Art. NS
+art_nat_model <- glmer(Art ~ Naturalness + (1 | Subject) + (1|Image), data = nat_longer, family = binomial(logit), control = glmerControl(optimizer = "bobyqa"))
+summary(art_nat_model)
+art_nat_model2 <- glmer(Art ~ Naturalness + (1 | Subject), data = nat_longer, family = binomial(logit), control = glmerControl(optimizer = "bobyqa"))
+summary(art_nat_model2)
+art_nat_nullmodel <- glmer(Art ~ 1 + (1 | Subject), data = nat_longer, family = binomial(logit), control = glmerControl(optimizer = "bobyqa"))
+anova(art_nat_model2, art_nat_nullmodel)
+#Celebration. Significant - negative
+cel_nat_model <- glmer(Celebration ~ Naturalness + (1 | Subject) + (1|Image), data = nat_longer, family = binomial(logit), control = glmerControl(optimizer = "bobyqa"))
+summary(cel_nat_model)
+cel_nat_model2 <- glmer(Celebration ~ Naturalness + (1 | Subject), data = nat_longer, family = binomial(logit), control = glmerControl(optimizer = "bobyqa"))
+summary(cel_nat_model2)
+cel_nat_nullmodel <- glmer(Celebration ~ 1 + (1 | Subject), data = nat_longer, family = binomial(logit), control = glmerControl(optimizer = "bobyqa"))
+anova(cel_nat_model2, cel_nat_nullmodel)
+#Family
+fam_nat_model <- glmer(Family ~ Naturalness + (1 | Subject) + (1|Image), data = nat_longer, family = binomial(logit), control = glmerControl(optimizer = "bobyqa"))
+summary(fam_nat_model)
+fam_nat_model2 <- glmer(Family ~ Naturalness + (1 | Subject), data = nat_longer, family = binomial(logit), control = glmerControl(optimizer = "bobyqa"))
+summary(fam_nat_model2)
+fam_nat_nullmodel <- glmer(Family ~ 1 + (1 | Subject), data = nat_longer, family = binomial(logit), control = glmerControl(optimizer = "bobyqa"))
+anova(fam_nat_model2, fam_nat_nullmodel)
+#LifeEmotion
+le_nat_model <- glmer(LifeEmotion ~ Naturalness + (1 | Subject) + (1|Image), data = nat_longer, family = binomial(logit), control = glmerControl(optimizer = "bobyqa"))
+summary(le_nat_model)
+le_nat_nullmodel <- glmer(LifeEmotion ~ 1 + (1 | Subject) + (1|Image), data = nat_longer, family = binomial(logit), control = glmerControl(optimizer = "bobyqa"))
+anova(le_nat_model, le_nat_nullmodel)
+#Park
+park_nat_model <- glmer(Park ~ Naturalness + (1 | Subject) + (1|Image), data = nat_longer, family = binomial(logit), control = glmerControl(optimizer = "bobyqa"))
+summary(park_nat_model)
+park_nat_nullmodel <- glmer(Park ~ 1 + (1 | Subject) + (1|Image), data = nat_longer, family = binomial(logit), control = glmerControl(optimizer = "bobyqa"))
+anova(park_nat_model, park_nat_nullmodel)
+#Religion. Significant - positive
+rel_nat_model <- glmer(Religion ~ Naturalness + (1 | Subject) + (1|Image), data = nat_longer, family = binomial(logit), control = glmerControl(optimizer = "bobyqa"))
+summary(rel_nat_model)
+rel_nat_nullmodel <- glmer(Religion ~ 1 + (1 | Subject) + (1|Image), data = nat_longer, family = binomial(logit), control = glmerControl(optimizer = "bobyqa"))
+anova(rel_nat_model, rel_nat_nullmodel)
+#TimeMemories. Significant - negative
+time_nat_model <- glmer(TimeMemories ~ Naturalness + (1 | Subject) + (1|Image), data = nat_longer, family = binomial(logit), control = glmerControl(optimizer = "bobyqa"))
+summary(time_nat_model)
+time_nat_nullmodel <- glmer(TimeMemories ~ 1 + (1 | Subject) + (1|Image), data = nat_longer, family = binomial(logit), control = glmerControl(optimizer = "bobyqa"))
+anova(time_nat_model, time_nat_nullmodel)
+#WorldPeace
+world_nat_model <- glmer(WorldPeace ~ Naturalness + (1 | Subject) + (1|Image), data = nat_longer, family = binomial(logit), control = glmerControl(optimizer = "bobyqa"))
+summary(world_nat_model)
+world_nat_nullmodel <- glmer(WorldPeace ~ 1 + (1 | Subject) + (1|Image), data = nat_longer, family = binomial(logit), control = glmerControl(optimizer = "bobyqa"))
+anova(world_nat_model, world_nat_nullmodel)
+```
+
